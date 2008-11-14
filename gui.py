@@ -13,10 +13,13 @@ class GUI:
     newton = None
     pixbuf = None
     dragging = False
+    clickx = 0
+    clicky = 0
     defaults = {'xrange': [-3.0, 3.0], 'yrange': [-3.0, 3.0]}
     def __init__(self):
         self._init_gui()
         self.update()
+        self.win.show_all()
     def _init_toolbar_items(self):
         print "in init toolbar items"
         icontheme = gtk.icon_theme_get_default()
@@ -56,10 +59,13 @@ class GUI:
         self.win.set_title("Sorbi")
         self.win.connect("delete_event", gtk.main_quit)
         
-        self.img = gtk.Image()
-        self.img.connect("mouse-down", lambda w: self.mouse_start_drag())
-        self.img.connect("mouse-up", lambda w: self.mouse_end_drag())
-        self.img.connect("mouse-move-event", self.mouse_move_event)
+        self.img = gtk.DrawingArea()#gtk.Image()
+        self.img.connect("expose-event", self.expose_event)
+        self.eventbox = gtk.EventBox()
+        self.eventbox.add(self.img)
+        self.eventbox.connect("button-press-event", self.mouse_start_drag)
+        self.eventbox.connect("button-release-event", self.mouse_end_drag)
+        self.eventbox.connect("motion-notify-event", self.mouse_move_event)
         self.function_label = gtk.Label("Function: ")
         self.function_box = gtk.Entry()
         self.function_box.set_text("z**4 - 1")
@@ -76,11 +82,9 @@ class GUI:
         self.update_button.connect("clicked", lambda w: self.update())
         
         self.vbox.pack_start(self._init_toolbar())
-        self.vbox.pack_start(self.img)
+        self.vbox.pack_start(self.eventbox)
         self.vbox.pack_start(hbox)
         self.vbox.pack_start(self.update_button)
-        
-        self.win.show_all()
     def export(self):
         print "exporting"
     def update(self):
@@ -92,21 +96,40 @@ class GUI:
             raise
         self.newton = None
         self.update_image()
-    def mouse_start_drag(self):
+    def mouse_start_drag(self, widget, event):
         self.dragging = True
-    def mouse_end_drag(self):
-        self.dragging = True
-    def mouse_move_event(self, widget):
-        gc = widget.window.new_gc()
-        gc.set_line_attributes(3, gtk.gdk.LINE_ON_OFF_DASH,
-                                        gtk.gdk.CAP_ROUND, gtk.gdk.JOIN_ROUND)
-        self.img.set_from_pixbuf(self.pixbuf)
-        self.img.window.draw_rectangle(gc, True, 10, 10, 100, 100)
+        self.clickx = event.x
+        self.clicky = event.y
+        print "start drag"
+    def mouse_end_drag(self, wiget, event):
+        self.dragging = False
+        print "end drag"
+    def mouse_move_event(self, widget, event):
+        if self.dragging:
+            x,y,width,height = 0,0, 100, 100
+            gc = widget.window.new_gc()
+            gc.set_line_attributes(3, gtk.gdk.LINE_ON_OFF_DASH,
+                                   gtk.gdk.CAP_ROUND, gtk.gdk.JOIN_ROUND)
+            widget.window.draw_drawable(widget.get_style().fg_gc[gtk.STATE_NORMAL],
+                                    self.pixbuf.render_pixmap_and_mask()[0], x, y, x, y, width, height)
+
+            #self.img.set_from_pixbuf(self.pixbuf)
+            w = event.x - self.clickx
+            h = event.y - self.clicky
+            self.img.window.draw_rectangle(gc, False, self.clickx, self.clicky, w, h)
+    def expose_event(self, widget, event):
+        print "Drawing"
+        x , y, width, height = event.area
+        widget.window.draw_drawable(widget.get_style().fg_gc[gtk.STATE_NORMAL],
+                                    self.pixbuf.render_pixmap_and_mask()[0], x, y, x, y, width, height)
+        return False
+
     def update_image(self):
         if not self.newton:
             self.newton = Newton(self.func, self.deri, status=statusfunc)
         self.pixbuf = image_to_pixbuf(self.newton.as_PIL_image())
-        self.img.set_from_pixbuf(self.pixbuf)
+        #self.img.set_from_pixbuf(self.pixbuf)
+        self.img.queue_draw()
     def zoom_out(self, event):
         if not self.newton:
             return
