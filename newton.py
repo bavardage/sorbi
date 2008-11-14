@@ -22,34 +22,38 @@ class Colormap:
 		    +  ((als-ale)*ratio + ale).astype(uint32) * 0x1000000)
 
 class NewtonFractal:
-	def __init__(self, function, derivative, maxit=30):
+	def __init__(self, function, derivative, maxit=30, status=None):
 		self.function, self.derivative = function, derivative
 		self.maxit = maxit
-		self.xrange = [-3, 3]
-		self.yrange = [-3, 3]
-	def x_range(self, min, max):
+		self.xrange = array([-3.0, 3.0], dtype=float)
+		self.yrange = array([-3.0, 3.0], dtype=float)
+		self.status = (status if callable(status) else lambda x:x)
+	def set_xrange(self, min, max):
 		if min < max:
-			self.xrange = [min, max]
-	def y_range(self, min, max):
+			self.xrange = array([min, max], dtype=float)
+	def set_yrange(self, min, max):
 		if min < max:
-			self.yrange = [min, max]
+			self.yrange = array([min, max], dtype=float)
 	def make_grid(self, w, h):
 		y,x = ogrid[self.xrange[0]:self.xrange[1]:h*1j, \
 				    self.yrange[0]:self.yrange[1]:w*1j]
 		z = x+y*1j
 		return z
 	def newtons_method(self, guess, mode='iteration'):
+		self.status("Calculating...")
 		if mode=='iteration':
 			z = guess
 			iters = zeros(z.shape, dtype=int)
 			last = z.copy()
 			for i in xrange(self.maxit):
+				self.status("Iteration %i of %i" % (i, self.maxit))
 				z = z - self.function(z)/self.derivative(z)
 				iters[not_equal(z, last)] = i
 				last = z.copy()
+			self.status("... Done Calculating")
 			return iters
 		else:
-			print "mode not supported"
+			self.status("mode not supported")
 	
 	def show_fractal(self, width=200, height=200, mode="iteration"):
 		data = self.newtons_method(self.make_grid(width, height), mode)
@@ -65,7 +69,9 @@ class NewtonFractal:
 			       adjustment = adjustment,
 			       max = (self.maxit if not dynamic_color else None))
 		#map = self.map_colours(data, col.start, col.end)
+		self.status("Mapping data to colors...")
 		map = col.map_to_color(data)
+		self.status("Done")
 		img = Image.fromarray(map, 'RGBA')
 		return img
 
