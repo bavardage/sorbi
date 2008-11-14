@@ -57,6 +57,9 @@ class GUI:
         self.win.connect("delete_event", gtk.main_quit)
         
         self.img = gtk.Image()
+        self.img.connect("mouse-down", lambda w: self.mouse_start_drag())
+        self.img.connect("mouse-up", lambda w: self.mouse_end_drag())
+        self.img.connect("mouse-move-event", self.mouse_move_event)
         self.function_label = gtk.Label("Function: ")
         self.function_box = gtk.Entry()
         self.function_box.set_text("z**4 - 1")
@@ -89,8 +92,16 @@ class GUI:
             raise
         self.newton = None
         self.update_image()
-    def mouse_start_drag(self, event):
+    def mouse_start_drag(self):
         self.dragging = True
+    def mouse_end_drag(self):
+        self.dragging = True
+    def mouse_move_event(self, widget):
+        gc = widget.window.new_gc()
+        gc.set_line_attributes(3, gtk.gdk.LINE_ON_OFF_DASH,
+                                        gtk.gdk.CAP_ROUND, gtk.gdk.JOIN_ROUND)
+        self.img.set_from_pixbuf(self.pixbuf)
+        self.img.window.draw_rectangle(gc, True, 10, 10, 100, 100)
     def update_image(self):
         if not self.newton:
             self.newton = Newton(self.func, self.deri, status=statusfunc)
