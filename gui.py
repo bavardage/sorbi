@@ -12,6 +12,7 @@ def statusfunc(message):
 class GUI:
     newton = None
     pixbuf = None
+    buffer = None
     dragging = False
     clickx = 0
     clicky = 0
@@ -59,8 +60,8 @@ class GUI:
         self.win.set_title("Sorbi")
         self.win.connect("delete_event", gtk.main_quit)
         
-        self.img = gtk.DrawingArea()#gtk.Image()
-        self.img.connect("expose-event", self.expose_event)
+        self.img = gtk.Image()
+#        self.img.connect("expose-event", self.expose_event)
         self.eventbox = gtk.EventBox()
         self.eventbox.add(self.img)
         self.eventbox.connect("button-press-event", self.mouse_start_drag)
@@ -110,26 +111,16 @@ class GUI:
             gc = widget.window.new_gc()
             gc.set_line_attributes(3, gtk.gdk.LINE_ON_OFF_DASH,
                                    gtk.gdk.CAP_ROUND, gtk.gdk.JOIN_ROUND)
-            widget.window.draw_drawable(widget.get_style().fg_gc[gtk.STATE_NORMAL],
-                                    self.pixbuf.render_pixmap_and_mask()[0], x, y, x, y, width, height)
-
-            #self.img.set_from_pixbuf(self.pixbuf)
             w = event.x - self.clickx
             h = event.y - self.clicky
-            self.img.window.draw_rectangle(gc, False, self.clickx, self.clicky, w, h)
-    def expose_event(self, widget, event):
-        print "Drawing"
-        x , y, width, height = event.area
-        widget.window.draw_drawable(widget.get_style().fg_gc[gtk.STATE_NORMAL],
-                                    self.pixbuf.render_pixmap_and_mask()[0], x, y, x, y, width, height)
-        return False
-
+            self.pixbuf.window.draw_rectangle(gc, False, self.clickx, self.clicky, w, h)
     def update_image(self):
         if not self.newton:
             self.newton = Newton(self.func, self.deri, status=statusfunc)
-        self.pixbuf = image_to_pixbuf(self.newton.as_PIL_image())
-        #self.img.set_from_pixbuf(self.pixbuf)
-        self.img.queue_draw()
+        self.buffer = image_to_pixbuf(self.newton.as_PIL_image())
+        self.pixbuf = self.buffer.copy()
+        self.img.set_from_pixbuf(self.pixbuf)
+        #self.img.queue_draw()
     def zoom_out(self, event):
         if not self.newton:
             return
