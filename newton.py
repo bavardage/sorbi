@@ -42,10 +42,11 @@ class NewtonFractal:
 	def map_colours(self, input, start, end, adjustment=lambda x:x):
 		rs,gs,bs,als = start
 		re,ge,be,ale = end
-		return  (input*(rs-re)/self.maxit + re) \
-		    +  (input*(gs-ge)/self.maxit + ge) * 0x100 \
-		    + (input*(bs-be)/self.maxit + be) * 0x10000 \
-		    +  (input*(als-ale)/self.maxit + ale) * 0x1000000
+		ratio = input/self.maxit
+		return  (ratio *(rs-re) + re) \
+		    +  (ratio * (gs-ge) + ge) * 0x100 \
+		    + (ratio*(bs-be) + be) * 0x10000 \
+		    +  (ratio*(als-ale) + ale) * 0x1000000
 		    
 	def as_PIL_image(self, width=200, height=200, mode="iteration"):
 		data = self.newtons_method(self.make_grid(width, height), mode)
