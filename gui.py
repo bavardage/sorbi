@@ -1,14 +1,33 @@
 #!/usr/bin/env python
 
 import gtk
+import gobject
+import threading
 
 from newton import NewtonFractal as Newton
 from piltopixbuf import image_to_pixbuf
 from numpy import *
 
+gobject.threads_init()
+
+
 def statusfunc(message):
     print "status: %s" % message
 
+class FractalThread(threading.Thread):
+    def __init__(self, parent):
+        super(FractalThread, self).__init__()
+        self.parent = parent
+    def update_image(self):
+        self.parent.img.queue_draw()
+    def run(self):
+        if not self.parent.newton:
+            self.parent.newton = Newton(self.parent.func, self.parent.deri, status=self.parent.update_statusbar)
+            self.parent.newton.colormap.adjustment = lambda x:x**0.5
+        self.parent.buffer = image_to_pixbuf(self.parent.newton.as_PIL_image())
+        self.parent.pixbuf_mask = self.parent.buffer.copy().render_pixmap_and_mask()
+        self.parent.img.set_from_pixmap(*self.parent.pixbuf_mask)
+        gobject.idle_add(self.update_image)
 class GUI:
     newton = None
     pixbuf = None
@@ -61,7 +80,6 @@ class GUI:
         self.win.connect("delete_event", gtk.main_quit)
         
         self.img = gtk.Image()
-#        self.img.connect("expose-event", self.expose_event)
         self.eventbox = gtk.EventBox()
         self.eventbox.add(self.img)
         self.eventbox.connect("button-press-event", self.mouse_start_drag)
@@ -73,19 +91,23 @@ class GUI:
         self.derivative_label = gtk.Label("Derivative: ")
         self.derivative_box = gtk.Entry()
         self.derivative_box.set_text("4*z**3")
+        self.update_button = gtk.Button("Update")
+        self.update_button.connect("clicked", lambda w: self.update())
         hbox = gtk.HBox()
         hbox.pack_start(self.function_label)
         hbox.pack_start(self.function_box)
         hbox.pack_start(self.derivative_label)
         hbox.pack_start(self.derivative_box)
+        hbox.pack_start(self.update_button, False, False, padding=5)
         
-        self.update_button = gtk.Button("Update")
-        self.update_button.connect("clicked", lambda w: self.update())
+        self.statusbar = gtk.Statusbar()
+        self.messid = self.statusbar.push(1, "Ready")
         
-        self.vbox.pack_start(self._init_toolbar())
+        self.vbox.pack_start(self._init_toolbar(), False, False)
         self.vbox.pack_start(self.eventbox)
-        self.vbox.pack_start(hbox)
-        self.vbox.pack_start(self.update_button)
+        self.vbox.pack_start(hbox, False, False, padding=10)
+        #self.vbox.pack_start(self.update_button, False, False)
+        self.vbox.pack_start(self.statusbar, False, False)
     def export(self):
         print "exporting"
     def update(self):
@@ -99,28 +121,53 @@ class GUI:
         self.update_image()
     def mouse_start_drag(self, widget, event):
         self.dragging = True
-        self.clickx = event.x
-        self.clicky = event.y
+        print event.x, widget.allocation.width, self.img.allocation.width
+        self.clickx = event.x - (widget.allocation.width - self.img.get_pixmap()[0].get_size()[0])/2
+        self.clicky = event.y - (widget.allocation.height - self.img.get_pixmap()[0].get_size()[1])/2
         print "start drag"
-    def mouse_end_drag(self, wiget, event):
+    def mouse_end_drag(self, widget, event):
         self.dragging = False
-        print "end drag"
+        self.pixbuf_mask = self.buffer.copy().render_pixmap_and_mask()
+        self.img.set_from_pixmap(*self.pixbuf_mask)
+        self.img.queue_draw()
+        w = event.x - self.clickx - (widget.allocation.width - self.img.get_pixmap()[0].get_size()[0])/2
+        h = event.y - self.clicky - (widget.allocation.height - self.img.get_pixmap()[0].get_size()[1])/2
+        width, height = self.img.get_pixmap()[0].get_size()
+        ywid = self.newton.yrange[1] - self.newton.yrange[0]
+        xwid = self.newton.xrange[1] - self.newton.xrange[0]
+        self.newton.yrange[1] -= (width - w - self.clickx)/width * ywid
+        self.newton.yrange[0] += self.clickx / width * ywid
+        self.newton.xrange[1] -= (height - h - self.clicky)/height * xwid
+        self.newton.xrange[0] += self.clicky / height * xwid
+        self.update_image()
     def mouse_move_event(self, widget, event):
         if self.dragging:
-            x,y,width,height = 0,0, 100, 100
             gc = widget.window.new_gc()
             gc.set_line_attributes(3, gtk.gdk.LINE_ON_OFF_DASH,
                                    gtk.gdk.CAP_ROUND, gtk.gdk.JOIN_ROUND)
-            w = event.x - self.clickx
-            h = event.y - self.clicky
-            self.pixbuf.window.draw_rectangle(gc, False, self.clickx, self.clicky, w, h)
+            w = event.x - self.clickx - (widget.allocation.width - self.img.get_pixmap()[0].get_size()[0])/2
+            h = event.y - self.clicky - (widget.allocation.height - self.img.get_pixmap()[0].get_size()[1])/2
+            x,y = self.clickx, self.clicky
+            if w < 0:
+                x  += w
+                w *= -1
+            if h < 0:
+                y += h
+                h *= -1
+            self.pixbuf_mask = self.buffer.copy().render_pixmap_and_mask()
+            self.pixbuf_mask[0].draw_rectangle(gc, False, x, y, w, h)
+            self.img.set_from_pixmap(*self.pixbuf_mask)
+            self.img.queue_draw()
     def update_image(self):
-        if not self.newton:
-            self.newton = Newton(self.func, self.deri, status=statusfunc)
+        thr = FractalThread(self)
+        thr.start()
+        '''        if not self.newton:
+        self.newton = Newton(self.func, self.deri, status=self.update_statusbar)
+        self.newton.colormap.adjustment = lambda x:x**0.5
         self.buffer = image_to_pixbuf(self.newton.as_PIL_image())
-        self.pixbuf = self.buffer.copy()
-        self.img.set_from_pixbuf(self.pixbuf)
-        #self.img.queue_draw()
+        self.pixbuf_mask = self.buffer.copy().render_pixmap_and_mask()
+        self.img.set_from_pixmap(*self.pixbuf_mask)
+        #self.img.queue_draw()'''
     def zoom_out(self, event):
         if not self.newton:
             return
@@ -139,6 +186,13 @@ class GUI:
         self.newton.set_xrange(*self.defaults['xrange'])
         self.newton.set_yrange(*self.defaults['yrange'])
         self.update_image()
+    def update_statusbar(self, message):
+        print "message: %s" % message
+        gobject.idle_add(self.update_status_message, message)
+    def update_status_message(self, message):
+        self.statusbar.remove(1, self.messid)
+        self.messid = self.statusbar.push(1, message)
+        
 
 if __name__ == '__main__':
     gui = GUI()

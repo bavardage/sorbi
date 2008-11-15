@@ -22,12 +22,14 @@ class Colormap:
 		    +  ((als-ale)*ratio + ale).astype(uint32) * 0x1000000)
 
 class NewtonFractal:
-	def __init__(self, function, derivative, maxit=30, status=None):
+	def __init__(self, function, derivative, maxit=30, status=None, colormap = None):
 		self.function, self.derivative = function, derivative
 		self.maxit = maxit
 		self.xrange = array([-3.0, 3.0], dtype=float)
 		self.yrange = array([-3.0, 3.0], dtype=float)
 		self.status = (status if callable(status) else lambda x:x)
+		self.colormap =( Colormap([0xff, 0x00, 0x33, 0xff],
+			       [0x00, 0x00, 0x0, 0xff]) if not colormap else colormap)
 	def set_xrange(self, min, max):
 		if min < max:
 			self.xrange = array([min, max], dtype=float)
@@ -61,16 +63,11 @@ class NewtonFractal:
 		pylab.hot()
 		pylab.show()
 		    
-	def as_PIL_image(self, width=200, height=200, mode="iteration", adjustment = None, dynamic_color = True):
+	def as_PIL_image(self, width=200, height=200, mode="iteration", dynamic_color = True):
 		data = self.newtons_method(self.make_grid(width, height), mode)
 		map = zeros(data.shape, uint32)
-		col = Colormap([0xaa, 0x33, 0xff, 0x88],
-			       [0xff, 0xff, 0x0, 0xff],
-			       adjustment = adjustment,
-			       max = (self.maxit if not dynamic_color else None))
-		#map = self.map_colours(data, col.start, col.end)
 		self.status("Mapping data to colors...")
-		map = col.map_to_color(data)
+		map = self.colormap.map_to_color(data)
 		self.status("Done")
 		img = Image.fromarray(map, 'RGBA')
 		return img
